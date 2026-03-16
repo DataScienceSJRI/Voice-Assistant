@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Depends
 
 from auth import get_current_user
 from config import SUPABASE_URL, SUPABASE_ANON_KEY
-from database import db_pool
+import database
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -13,7 +13,7 @@ router = APIRouter()
 @router.get("/health")
 async def health():
     try:
-        async with db_pool.acquire() as conn:
+        async with database.db_pool.acquire() as conn:
             await conn.fetchval("SELECT 1")
     except Exception as e:
         logger.error("Health check DB failure: %s", e)
