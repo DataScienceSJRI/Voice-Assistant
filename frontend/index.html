@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ElevenLabs Agent Tester</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════
+     LOGIN OVERLAY
+     ════════════════════════════════════════════════ -->
+<div id="loginOverlay">
+  <div class="login-box">
+    <h2>🎙 Agent Tester</h2>
+    <p>Sign in to start testing.</p>
+    <div class="field">
+      <label for="loginEmail">Email</label>
+      <input type="email" id="loginEmail" placeholder="you@company.com" autocomplete="email" />
+    </div>
+    <div class="field">
+      <label for="loginPassword">Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password" />
+    </div>
+    <div class="login-error" id="loginError"></div>
+    <button class="btn-primary btn-full" id="loginBtn" onclick="doLogin()">Sign In</button>
+    <button class="forgot-btn" onclick="forgotPassword()">Forgot password?</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     FEEDBACK MODAL
+     ════════════════════════════════════════════════ -->
+<div class="modal-backdrop hidden" id="feedbackModal">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3>How did this session go?</h3>
+      <button class="close-btn" title="Skip feedback" onclick="skipFeedback()">×</button>
+    </div>
+    <div class="modal-body">
+      <div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Outcome</div>
+        <div class="outcome-btns">
+          <button class="outcome-btn" data-outcome="worked"  onclick="selectOutcome('worked')">✓ Worked</button>
+          <button class="outcome-btn" data-outcome="partial" onclick="selectOutcome('partial')">~ Partial</button>
+          <button class="outcome-btn" data-outcome="failed"  onclick="selectOutcome('failed')">✗ Failed</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="feedbackNotes">Notes (what worked / what didn't)</label>
+        <textarea id="feedbackNotes" class="notes-area" placeholder="e.g. Agent handled greetings well but failed on pricing questions…"></textarea>
+      </div>
+      <button class="btn-primary btn-full" onclick="submitFeedback()">Save &amp; Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     HISTORY MODAL
+     ════════════════════════════════════════════════ -->
+<div class="modal-backdrop hidden" id="historyModal">
+  <div class="modal history-modal">
+    <div class="modal-hdr">
+      <h3>Test Sessions</h3>
+      <button class="close-btn" onclick="closeHistory()">×</button>
+    </div>
+    <div class="history-filters">
+      <button class="filter-btn active" id="filterAll"     onclick="setFilter('all')">All</button>
+      <button class="filter-btn"        id="filterWorked"  onclick="setFilter('worked')">✓ Worked</button>
+      <button class="filter-btn"        id="filterPartial" onclick="setFilter('partial')">~ Partial</button>
+      <button class="filter-btn"        id="filterFailed"  onclick="setFilter('failed')">✗ Failed</button>
+      <div style="margin-left:auto;display:flex;gap:8px;flex-shrink:0;">
+        <button class="filter-btn" id="adminTabBtn" onclick="toggleAdminView()" style="display:none;">👥 All Testers</button>
+        <button class="filter-btn" onclick="downloadCSV()">⬇ Export</button>
+      </div>
+    </div>
+    <div class="session-list" id="sessionList">
+      <div class="empty-history">Loading…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     HEADER
+     ════════════════════════════════════════════════ -->
+<header>
+  <h1>🎙 ElevenLabs Agent Tester</h1>
+  <div class="header-badge">Tester: <strong id="headerName">—</strong></div>
+  <span class="session-badge" id="sessionBadge"></span>
+  <span class="spacer"></span>
+  <button class="icon-btn" onclick="openHistory()">📋 Sessions</button>
+  <button class="icon-btn" onclick="signOut()" style="margin-left:6px;">↩ Sign Out</button>
+</header>
+
+<!-- ════════════════════════════════════════════════
+     MAIN
+     ════════════════════════════════════════════════ -->
+<main>
+
+  <!-- Left: Prompt config -->
+  <section class="panel left-panel">
+    <div class="panel-hdr">
+      <h2>System Prompt</h2>
+      <span class="prompt-meta">
+        <span id="promptStatus">Loading…</span>
+        <button class="refresh-btn" title="Refresh from dashboard" onclick="loadAgentConfig()">↻</button>
+      </span>
+    </div>
+
+    <div class="prompt-body">
+      <textarea id="prompt" placeholder="System prompt will load from your ElevenLabs dashboard…"></textarea>
+    </div>
+
+    <div class="prompt-actions">
+      <div class="action-btns">
+        <button class="btn-secondary" onclick="loadAgentConfig()">Reset to Dashboard</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Right: Conversation -->
+  <section class="panel right-panel">
+    <div class="conv-hdr">
+      <div class="status-pill">
+        <span class="dot idle" id="statusDot"></span>
+        <span id="statusText">Ready</span>
+      </div>
+      <span class="mode-badge" id="modeBadge"> </span>
+    </div>
+
+    <div class="transcript" id="transcript">
+      <div class="transcript-empty">Start a conversation to see the transcript here.</div>
+    </div>
+
+    <div class="conv-footer">
+      <button id="toggleBtn" onclick="toggleConversation()">Start Conversation</button>
+      <div class="footer-hint" id="footerHint">Your browser will request microphone access when you start.</div>
+    </div>
+  </section>
+</main>
+
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/conversation.js"></script>
+<script src="js/history.js"></script>
+</body>
+</html>
