@@ -51,7 +51,7 @@ async function downloadCSV() {
   if (!session) { showToast('Not signed in', 'error'); return; }
   const endpoint = adminViewActive ? '/api/admin/sessions/export' : '/api/sessions/export';
   try {
-    const r = await fetch(endpoint, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
+    const r = await fetch(BASE_PATH + endpoint, { headers: { 'Authorization': `Bearer ${session.access_token}` } });
     if (!r.ok) throw new Error(r.status);
     const blob = await r.blob();
     const url  = URL.createObjectURL(blob);

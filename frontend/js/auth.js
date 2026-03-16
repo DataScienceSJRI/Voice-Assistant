@@ -11,7 +11,7 @@ let adminViewActive = false;
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 async function bootstrap() {
   try {
-    const config = await fetch('/api/config').then(r => r.json());
+    const config = await fetch(BASE_PATH + '/api/config').then(r => r.json());
     supabaseClient = supabase.createClient(config.supabase_url, config.supabase_anon_key);
   } catch (e) {
     console.error('Failed to load config:', e);
@@ -43,7 +43,7 @@ async function bootstrap() {
   // Abandon the active session if the tab is closed mid-conversation
   window.addEventListener('beforeunload', () => {
     if (!currentSession || !cachedToken) return;
-    fetch(`/api/sessions/${currentSession.id}/abandon`, {
+    fetch(BASE_PATH + `/api/sessions/${currentSession.id}/abandon`, {
       method: 'POST',
       keepalive: true,
       headers: { 'Authorization': `Bearer ${cachedToken}` },
@@ -151,7 +151,7 @@ async function apiFetch(path, opts = {}) {
     ...(opts.headers || {}),
   };
 
-  const r = await fetch(path, { ...opts, headers });
+  const r = await fetch(BASE_PATH + path, { ...opts, headers });
 
   if (r.status === 401) {
     // Only sign out if it's our own auth endpoint rejecting the token
