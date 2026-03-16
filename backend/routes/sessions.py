@@ -6,7 +6,8 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel, field_validator
 
 from auth import get_current_user
-from database import db_pool, row_to_dict
+import database
+from database import row_to_dict
 from limiter import limiter
 from utils import new_session_id, _csv_response
 
@@ -28,7 +29,7 @@ class CreateSession(BaseModel):
 @limiter.limit("20/minute")
 async def create_session(request: Request, body: CreateSession, user=Depends(get_current_user)):
     sid = new_session_id()
-    async with db_pool.acquire() as conn:
+    async with database.db_pool.acquire() as conn:
         await conn.execute(
             """
             INSERT INTO test_sessions (id, user_id, tester_name, prompt_used, is_override)
@@ -63,7 +64,7 @@ class TranscriptEntry(BaseModel):
 @router.post("/api/sessions/{session_id}/transcript")
 @limiter.limit("120/minute")
 async def add_transcript(request: Request, session_id: str, entry: TranscriptEntry, user=Depends(get_current_user)):
-    async with db_pool.acquire() as conn:
+    async with database.db_pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT user_id FROM test_sessions WHERE id=$1", session_id
         )
@@ -101,7 +102,7 @@ class EndSession(BaseModel):
 @router.put("/api/sessions/{session_id}/end")
 @limiter.limit("30/minute")
 async def end_session(request: Request, session_id: str, body: EndSession, user=Depends(get_current_user)):
-    async with db_pool.acquire() as conn:
+    async with database.db_pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT user_id FROM test_sessions WHERE id=$1", session_id
         )
@@ -120,7 +121,7 @@ async def end_session(request: Request, session_id: str, body: EndSession, user=
 @limiter.limit("30/minute")
 async def abandon_session(request: Request, session_id: str, user=Depends(get_current_user)):
     """Called via keepalive fetch when the browser tab is closed mid-session."""
-    async with db_pool.acquire() as conn:
+    async with database.db_pool.acquire() as conn:
         row = await conn.fetchrow(
             "SELECT user_id, ended_at FROM test_sessions WHERE id=$1", session_id
         )
@@ -139,7 +140,7 @@ async def abandon_session(request: Request, session_id: str, user=Depends(get_cu
 @router.get("/api/sessions")
 @limiter.limit("30/minute")
 async def list_sessions(request: Request, user=Depends(get_current_user)):
-    async with db_pool.acquire() as conn:
+    async with database.db_pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT
                 s.*,
@@ -156,7 +157,7 @@ async def list_sessions(request: Request, user=Depends(get_current_user)):
 @router.get("/api/sessions/export")
 @limiter.limit("10/minute")
 async def export_my_sessions(request: Request, user=Depends(get_current_user)):
-    async with db_pool.acquire() as conn:
+    async with database.db_pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT s.*, COUNT(t.id) AS message_count
             FROM test_sessions s
@@ -170,7 +171,7 @@ async def export_my_sessions(request: Request, user=Depends(get_current_user)):
 
 @router.get("/api/sessions/{session_id}")
 async def get_session(session_id: str, user=Depends(get_current_user)):
-    async with db_pool.acquire() as conn:
+    async with database.db_pool.acquire() as conn:
         session = await conn.fetchrow(
             "SELECT * FROM test_sessions WHERE id=$1 AND user_id=$2",
             session_id, uuid_module.UUID(user["id"]),
