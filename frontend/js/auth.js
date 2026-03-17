@@ -10,10 +10,14 @@ let adminViewActive = false;
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 async function bootstrap() {
-  // Detect invite flow BEFORE creating the client (implicit: hash, PKCE: search param)
+  // Detect invite flow BEFORE creating the client
+  // - Implicit flow: #type=invite in hash
+  // - PKCE flow:     ?code= in search params (invites are the only thing that produces a code in this app)
   const hashParams   = new URLSearchParams(window.location.hash.slice(1));
   const searchParams = new URLSearchParams(window.location.search);
-  const isInviteFlow = hashParams.get('type') === 'invite' || searchParams.get('type') === 'invite';
+  const isInviteFlow = hashParams.get('type') === 'invite'
+                    || searchParams.get('type') === 'invite'
+                    || !!searchParams.get('code');
 
   try {
     const config = await fetch(BASE_PATH + '/api/config').then(r => r.json());
