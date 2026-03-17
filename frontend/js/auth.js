@@ -10,6 +10,13 @@ let adminViewActive = false;
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 async function bootstrap() {
+  // Detect invite flow before the Supabase client clears the hash
+  const hashParams = new URLSearchParams(window.location.hash.slice(1));
+  const isInviteFlow = hashParams.get('type') === 'invite';
+  if (isInviteFlow) {
+    history.replaceState(null, '', window.location.pathname + window.location.search);
+  }
+
   try {
     const config = await fetch(BASE_PATH + '/api/config').then(r => r.json());
     supabaseClient = supabase.createClient(config.supabase_url, config.supabase_anon_key);
@@ -32,10 +39,15 @@ async function bootstrap() {
   // Check for an existing session
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
-    cachedToken = session.access_token;
-    currentUser = session.user;
-    testerName  = currentUser.user_metadata?.full_name || currentUser.email;
-    showApp();
+    if (isInviteFlow) {
+      cachedToken = session.access_token;
+      showSetPasswordOverlay();
+    } else {
+      cachedToken = session.access_token;
+      currentUser = session.user;
+      testerName  = currentUser.user_metadata?.full_name || currentUser.email;
+      showApp();
+    }
   } else {
     showLoginOverlay();
   }
@@ -55,6 +67,54 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+// ── Invite / set-password flow ──────────────────────────────────────────────
+function showSetPasswordOverlay() {
+  document.getElementById('loginOverlay').style.display     = 'none';
+  document.getElementById('setPasswordOverlay').style.display = 'flex';
+  setTimeout(() => document.getElementById('newPassword').focus(), 50);
+}
+
+async function doSetPassword() {
+  const password = document.getElementById('newPassword').value;
+  const confirm  = document.getElementById('confirmPassword').value;
+  const btn      = document.getElementById('setPasswordBtn');
+  const errEl    = document.getElementById('setPasswordError');
+
+  errEl.style.display = 'none';
+
+  if (!password || password.length < 6) {
+    errEl.textContent   = 'Password must be at least 6 characters.';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (password !== confirm) {
+    errEl.textContent   = 'Passwords do not match.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  btn.disabled    = true;
+  btn.textContent = 'Setting password…';
+
+  const { error } = await supabaseClient.auth.updateUser({ password });
+
+  if (error) {
+    errEl.className     = 'login-error';
+    errEl.textContent   = error.message;
+    errEl.style.display = 'block';
+    btn.disabled        = false;
+    btn.textContent     = 'Set Password';
+    return;
+  }
+
+  const { data: { session } } = await supabaseClient.auth.getSession();
+  cachedToken = session.access_token;
+  currentUser = session.user;
+  testerName  = currentUser.user_metadata?.full_name || currentUser.email;
+  document.getElementById('setPasswordOverlay').style.display = 'none';
+  showApp();
+}
 
 // ── Login / auth ────────────────────────────────────────────────────────────
 function showLoginOverlay() {
