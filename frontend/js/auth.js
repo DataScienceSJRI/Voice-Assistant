@@ -10,16 +10,19 @@ let adminViewActive = false;
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 async function bootstrap() {
-  // Detect invite flow before the Supabase client clears the hash
-  const hashParams = new URLSearchParams(window.location.hash.slice(1));
-  const isInviteFlow = hashParams.get('type') === 'invite';
-  if (isInviteFlow) {
-    history.replaceState(null, '', window.location.pathname + window.location.search);
-  }
+  // Detect invite flow BEFORE creating the client (implicit: hash, PKCE: search param)
+  const hashParams   = new URLSearchParams(window.location.hash.slice(1));
+  const searchParams = new URLSearchParams(window.location.search);
+  const isInviteFlow = hashParams.get('type') === 'invite' || searchParams.get('type') === 'invite';
 
   try {
     const config = await fetch(BASE_PATH + '/api/config').then(r => r.json());
+    // Create client FIRST so it can read the token from the hash
     supabaseClient = supabase.createClient(config.supabase_url, config.supabase_anon_key);
+    // NOW clean the URL so a refresh doesn't re-trigger the invite flow
+    if (isInviteFlow) {
+      history.replaceState(null, '', window.location.pathname);
+    }
   } catch (e) {
     console.error('Failed to load config:', e);
     showToast('Could not reach server.', 'error');
@@ -29,14 +32,17 @@ async function bootstrap() {
   // Listen for auth state changes (handles token refresh, sign-out, etc.)
   supabaseClient.auth.onAuthStateChange((event, session) => {
     cachedToken = session?.access_token || null;
-    if (event === 'SIGNED_OUT' || (!session && event !== 'INITIAL_SESSION')) {
+    // PKCE invite: session arrives here rather than in getSession()
+    if (event === 'SIGNED_IN' && isInviteFlow && !currentUser) {
+      showSetPasswordOverlay();
+    } else if (event === 'SIGNED_OUT' || (!session && event !== 'INITIAL_SESSION')) {
       currentUser = null;
       testerName  = '';
       showLoginOverlay();
     }
   });
 
-  // Check for an existing session
+  // Check for an existing session (implicit invite flow lands here)
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
     if (isInviteFlow) {
@@ -48,9 +54,10 @@ async function bootstrap() {
       testerName  = currentUser.user_metadata?.full_name || currentUser.email;
       showApp();
     }
-  } else {
+  } else if (!isInviteFlow) {
     showLoginOverlay();
   }
+  // if isInviteFlow && no session yet: PKCE exchange is in flight, onAuthStateChange will handle it
 
   // Abandon the active session if the tab is closed mid-conversation
   window.addEventListener('beforeunload', () => {
