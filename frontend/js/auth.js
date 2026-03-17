@@ -10,31 +10,9 @@ let adminViewActive = false;
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
 async function bootstrap() {
-  // Detect invite / password-recovery flow BEFORE creating the client
-  const hashParams   = new URLSearchParams(window.location.hash.slice(1));
-  const searchParams = new URLSearchParams(window.location.search);
-
-  // Show a friendly message if Supabase returned an error (e.g. expired invite link)
-  if (hashParams.get('error')) {
-    const desc = hashParams.get('error_description')?.replace(/\+/g, ' ') || 'The link is invalid or has expired.';
-    history.replaceState(null, '', window.location.pathname);
-    // Bootstrap will still run; we'll show the error after login overlay appears
-    window._authError = desc;
-  }
-
-  const urlType      = hashParams.get('type') || searchParams.get('type');
-  const isInviteFlow   = urlType === 'invite'   || (!urlType && !!searchParams.get('code'));
-  const isRecoveryFlow = urlType === 'recovery';
-  const needsPassword  = isInviteFlow || isRecoveryFlow;
-
   try {
     const config = await fetch(BASE_PATH + '/api/config').then(r => r.json());
-    // Create client FIRST so it can read the token from the hash
     supabaseClient = supabase.createClient(config.supabase_url, config.supabase_anon_key);
-    // NOW clean the URL so a refresh doesn't re-trigger the flow
-    if (needsPassword) {
-      history.replaceState(null, '', window.location.pathname);
-    }
   } catch (e) {
     console.error('Failed to load config:', e);
     showToast('Could not reach server.', 'error');
@@ -44,34 +22,23 @@ async function bootstrap() {
   // Listen for auth state changes (handles token refresh, sign-out, etc.)
   supabaseClient.auth.onAuthStateChange((event, session) => {
     cachedToken = session?.access_token || null;
-    if (event === 'PASSWORD_RECOVERY') {
-      showSetPasswordOverlay(true);
-    } else if (event === 'SIGNED_IN' && needsPassword && !currentUser) {
-      // PKCE invite or recovery: session arrives here rather than in getSession()
-      showSetPasswordOverlay();
-    } else if (event === 'SIGNED_OUT' || (!session && event !== 'INITIAL_SESSION')) {
+    if (event === 'SIGNED_OUT' || (!session && event !== 'INITIAL_SESSION')) {
       currentUser = null;
       testerName  = '';
       showLoginOverlay();
     }
   });
 
-  // Check for an existing session (implicit invite/recovery flow lands here)
+  // Check for an existing session
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session) {
-    if (needsPassword) {
-      cachedToken = session.access_token;
-      showSetPasswordOverlay();
-    } else {
-      cachedToken = session.access_token;
-      currentUser = session.user;
-      testerName  = currentUser.user_metadata?.full_name || currentUser.email;
-      showApp();
-    }
-  } else if (!needsPassword) {
+    cachedToken = session.access_token;
+    currentUser = session.user;
+    testerName  = currentUser.user_metadata?.full_name || currentUser.email;
+    showApp();
+  } else {
     showLoginOverlay();
   }
-  // if needsPassword && no session yet: PKCE exchange is in flight, onAuthStateChange will handle it
 
   // Abandon the active session if the tab is closed mid-conversation
   window.addEventListener('beforeunload', () => {
@@ -89,69 +56,12 @@ async function bootstrap() {
 
 bootstrap();
 
-// ── Invite / set-password flow ──────────────────────────────────────────────
-function showSetPasswordOverlay(isRecovery = false) {
-  document.getElementById('setPasswordMsg').textContent = isRecovery
-    ? 'Enter a new password for your account.'
-    : 'Welcome! Set a password to activate your account.';
-  document.getElementById('loginOverlay').style.display       = 'none';
-  document.getElementById('setPasswordOverlay').style.display = 'flex';
-  setTimeout(() => document.getElementById('newPassword').focus(), 50);
-}
-
-async function doSetPassword() {
-  const password = document.getElementById('newPassword').value;
-  const confirm  = document.getElementById('confirmPassword').value;
-  const btn      = document.getElementById('setPasswordBtn');
-  const errEl    = document.getElementById('setPasswordError');
-
-  errEl.style.display = 'none';
-
-  if (!password || password.length < 6) {
-    errEl.textContent   = 'Password must be at least 6 characters.';
-    errEl.style.display = 'block';
-    return;
-  }
-  if (password !== confirm) {
-    errEl.textContent   = 'Passwords do not match.';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  btn.disabled    = true;
-  btn.textContent = 'Setting password…';
-
-  const { error } = await supabaseClient.auth.updateUser({ password });
-
-  if (error) {
-    errEl.className     = 'login-error';
-    errEl.textContent   = error.message;
-    errEl.style.display = 'block';
-    btn.disabled        = false;
-    btn.textContent     = 'Set Password';
-    return;
-  }
-
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  cachedToken = session.access_token;
-  currentUser = session.user;
-  testerName  = currentUser.user_metadata?.full_name || currentUser.email;
-  document.getElementById('setPasswordOverlay').style.display = 'none';
-  showApp();
-}
-
 // ── Login / auth ────────────────────────────────────────────────────────────
 function showLoginOverlay() {
   document.getElementById('loginOverlay').style.display = 'flex';
   const errEl = document.getElementById('loginError');
-  errEl.className = 'login-error';
-  if (window._authError) {
-    errEl.textContent   = window._authError;
-    errEl.style.display = 'block';
-    window._authError   = null;
-  } else {
-    errEl.style.display = 'none';
-  }
+  errEl.className     = 'login-error';
+  errEl.style.display = 'none';
   document.getElementById('loginBtn').disabled    = false;
   document.getElementById('loginBtn').textContent = 'Sign In';
   setTimeout(() => document.getElementById('loginEmail').focus(), 50);
